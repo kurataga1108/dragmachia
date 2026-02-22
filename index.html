@@ -5,75 +5,88 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ドラグマキア - プロトタイプ</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background-color: #222; color: #fff; margin: 0; padding: 20px; }
-        .battle-area { display: flex; justify-content: space-around; margin-bottom: 20px; }
-        .character { background: #333; padding: 15px; border-radius: 8px; width: 40%; position: relative; }
-        .hp-bar { background: #555; height: 20px; border-radius: 10px; margin-top: 5px; overflow: hidden;}
+        body { font-family: sans-serif; text-align: center; background-color: #222; color: #fff; margin: 0; padding: 10px; }
+        
+        /* 3対3用のレイアウト変更 */
+        .party-area { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .character { background: #333; padding: 10px; border-radius: 8px; width: 30%; font-size: 12px; position: relative; }
+        .character h3 { margin: 5px 0; font-size: 14px; }
+        
+        .hp-bar { background: #555; height: 15px; border-radius: 8px; margin-top: 5px; overflow: hidden;}
         .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
-        .enemy-hp .hp-fill { background: #f44336; }
+        .enemy-party .hp-fill { background: #f44336; }
         
-        /* 状態異常のアイコン表示用 */
-        .status-box { height: 20px; font-size: 14px; margin-top: 5px; font-weight: bold; }
-        .status-poison { color: #e040fb; text-shadow: 0 0 5px #000; margin-right: 5px; }
-        .status-para { color: #ffeb3b; text-shadow: 0 0 5px #000; }
+        .status-box { height: 18px; font-size: 12px; margin-top: 5px; font-weight: bold; }
+        .status-poison { color: #e040fb; }
+        .status-para { color: #ffeb3b; }
+        .dead { opacity: 0.3; } /* 倒れた時の見た目 */
+
+        .command-area { background: #111; padding: 10px; border-radius: 8px; margin-bottom: 10px;}
+        .command-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #4caf50; }
+        .btn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; }
         
-        .command-area { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-        button { padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px; transition: 0.2s;}
+        button { padding: 12px 20px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px;}
         button:active { background: #1976d2; transform: scale(0.98); }
-        button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
         
-        #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.5;}
+        #log { height: 180px; overflow-y: scroll; background: #000; padding: 10px; border-radius: 8px; text-align: left; font-size: 13px; line-height: 1.5;}
         .crit-text { color: #ffeb3b; font-weight: bold; }
         .miss-text { color: #9e9e9e; font-style: italic; }
-        .poison-text { color: #e040fb; }
-        .para-text { color: #ffeb3b; }
+        .sys-text { color: #4fc3f7; font-weight: bold; border-top: 1px solid #333; margin-top: 5px; padding-top: 5px;}
     </style>
 </head>
 <body>
 
     <h1>ドラグマキア</h1>
 
-    <div class="battle-area">
-        <div class="character">
-            <h3>リーフロング</h3>
-            <div id="player-hp-text">HP: 45 / 45</div>
-            <div class="hp-bar"><div id="player-hp-fill" class="hp-fill"></div></div>
-            <div id="player-status" class="status-box"></div>
-        </div>
-        <div class="character">
-            <h3>プチフレア</h3>
-            <div id="enemy-hp-text">HP: 30 / 30</div>
-            <div class="hp-bar enemy-hp"><div id="enemy-hp-fill" class="hp-fill"></div></div>
-            <div id="enemy-status" class="status-box"></div>
-        </div>
+    <div class="party-area enemy-party" id="enemy-party-div"></div>
+
+    <div style="margin: 10px 0; font-weight: bold;">VS</div>
+
+    <div class="party-area" id="player-party-div"></div>
+
+    <div class="command-area" id="command-area">
+        <div id="command-title" class="command-title">コマンド入力</div>
+        <div class="btn-group" id="btn-group"></div>
     </div>
 
-    <div class="command-area">
-        <button id="btn-skill-0" onclick="startTurn(0)">たいあたり</button>
-        <button id="btn-skill-1" onclick="startTurn(1)">ポイズンブレス</button>
-        <button id="btn-skill-2" onclick="startTurn(2)">パラライズロア</button>
-    </div>
-
-    <div id="log">野生のプチフレアが現れた！<br>バトル開始！<br></div>
+    <div id="log">バトル開始！<br></div>
 
     <script>
-        // 1. ステータスに「状態異常(status)」と「耐性(resist)」を追加
-        // プレイヤーを木属性の「リーフロング」に変更（高HP・低速度・状態異常技持ち）
-        let player = { 
-            name: "リーフロング", maxHp: 45, hp: 45, atk: 10, def: 15, spd: 8, crit: 0.05, eva: 0.0,
-            status: { poison: 0, paralysis: 0 }, resist: { poison: 0.0, paralysis: 0.0 },
-            skills: [
-                { name: "たいあたり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null, effectChance: 0 },
-                { name: "ポイズンブレス", power: 0.5, maxCt: 3, currentCt: 0, accuracy: 0.9, effect: "poison", effectChance: 0.7 }, // 70%で毒(3ターン)
-                { name: "パラライズロア", power: 0.8, maxCt: 4, currentCt: 0, accuracy: 0.9, effect: "paralysis", effectChance: 0.6 } // 60%で麻痺(2ターン)
-            ]
-        };
-        // 敵の速度は10（プレイヤーの8より速いので、必ず敵が先制します）
-        let enemy = { 
-            name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 10, crit: 0.05, eva: 0.1,
-            status: { poison: 0, paralysis: 0 }, resist: { poison: 0.0, paralysis: 0.0 },
-            skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null, effectChance: 0 } ]
-        };
+        // 1. キャラクターデータの配列化
+        let players = [
+            { id: "p0", name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10, spd: 15, crit: 0.05, eva: 0.0, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [
+                { name: "ひっかく", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null },
+                { name: "渾身の一撃", power: 2.0, maxCt: 4, currentCt: 0, accuracy: 0.8, effect: null }
+              ]
+            },
+            { id: "p1", name: "アクアサーペント", maxHp: 30, hp: 30, atk: 6, def: 8, spd: 12, crit: 0.05, eva: 0.0, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [
+                { name: "水鉄砲", power: 1.5, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null },
+                { name: "ブリザード", power: 1.2, maxCt: 5, currentCt: 0, accuracy: 0.9, effect: null } // 将来は全体攻撃に
+              ]
+            },
+            { id: "p2", name: "リーフロング", maxHp: 45, hp: 45, atk: 10, def: 15, spd: 8, crit: 0.05, eva: 0.0, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [
+                { name: "たいあたり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null },
+                { name: "ポイズンブレス", power: 0.5, maxCt: 3, currentCt: 0, accuracy: 0.9, effect: "poison", effectChance: 0.7 }
+              ]
+            }
+        ];
+
+        let enemies = [
+            { id: "e0", name: "プチフレアA", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 10, crit: 0.05, eva: 0.1, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null } ] },
+            { id: "e1", name: "プチフレアB", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 11, crit: 0.05, eva: 0.1, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null } ] },
+            { id: "e2", name: "プチフレアC", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 9, crit: 0.05, eva: 0.1, status: { poison: 0, paralysis: 0 }, resist: { poison: 0, paralysis: 0 },
+              skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null } ] }
+        ];
+
+        let roundActions = []; // ターン全員の行動を溜め込む箱
+        let currentPlayerIndex = 0; // 今誰がコマンドを選んでいるか
+        let roundCount = 1;
 
         function addLog(message) {
             const logDiv = document.getElementById("log");
@@ -81,176 +94,206 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        // 状態異常の表示用テキストを作る
         function getStatusHtml(char) {
             let html = "";
             if (char.status.poison > 0) html += `<span class="status-poison">【毒】</span>`;
-            if (char.status.paralysis > 0) html += `<span class="status-para">【麻痺】</span>`;
+            if (char.status.paralysis > 0) html += `<span class="status-para">【麻】</span>`;
             return html;
         }
 
+        // 画面の描画（3人分まとめて生成）
         function updateUI() {
-            document.getElementById("player-hp-text").innerText = `HP: ${player.hp} / ${player.maxHp}`;
-            document.getElementById("player-hp-fill").style.width = `${(player.hp / player.maxHp) * 100}%`;
-            document.getElementById("player-status").innerHTML = getStatusHtml(player);
-            
-            document.getElementById("enemy-hp-text").innerText = `HP: ${enemy.hp} / ${enemy.maxHp}`;
-            document.getElementById("enemy-hp-fill").style.width = `${(enemy.hp / enemy.maxHp) * 100}%`;
-            document.getElementById("enemy-status").innerHTML = getStatusHtml(enemy);
+            function renderParty(party, divId) {
+                let html = "";
+                party.forEach(char => {
+                    let deadClass = char.hp <= 0 ? "dead" : "";
+                    let hpPercent = (char.hp / char.maxHp) * 100;
+                    html += `
+                    <div class="character ${deadClass}">
+                        <h3>${char.name}</h3>
+                        <div>HP: ${char.hp}/${char.maxHp}</div>
+                        <div class="hp-bar"><div class="hp-fill" style="width: ${hpPercent}%"></div></div>
+                        <div class="status-box">${getStatusHtml(char)}</div>
+                    </div>`;
+                });
+                document.getElementById(divId).innerHTML = html;
+            }
+            renderParty(players, "player-party-div");
+            renderParty(enemies, "enemy-party-div");
+        }
 
-            for(let i = 0; i < 3; i++) {
-                let btn = document.getElementById(`btn-skill-${i}`);
-                let skill = player.skills[i];
+        // 2. コマンド入力フェーズの管理
+        function startCommandInput() {
+            // 生きている次のプレイヤーを探す
+            while(currentPlayerIndex < players.length && players[currentPlayerIndex].hp <= 0) {
+                currentPlayerIndex++;
+            }
+
+            // 全員のコマンド入力が終わったら、バトル実行フェーズへ
+            if (currentPlayerIndex >= players.length) {
+                document.getElementById("command-area").style.display = "none";
+                executeRound();
+                return;
+            }
+
+            // UIを現在のプレイヤーのものに切り替え
+            document.getElementById("command-area").style.display = "block";
+            let activePlayer = players[currentPlayerIndex];
+            document.getElementById("command-title").innerText = `▼ ${activePlayer.name}の行動選択 ▼`;
+            
+            let btnHtml = "";
+            activePlayer.skills.forEach((skill, idx) => {
                 if(skill.currentCt > 0) {
-                    btn.innerText = `${skill.name} (あと${skill.currentCt}ターン)`;
-                    btn.disabled = true;
+                    btnHtml += `<button disabled>${skill.name} (あと${skill.currentCt})</button>`;
                 } else {
-                    btn.innerText = skill.name;
-                    if(player.hp > 0 && enemy.hp > 0) btn.disabled = false;
+                    btnHtml += `<button onclick="selectSkill(${idx})">${skill.name}</button>`;
                 }
-            }
+            });
+            document.getElementById("btn-group").innerHTML = btnHtml;
         }
 
-        function disableAllButtons() {
-            for(let i = 0; i < 3; i++) {
-                document.getElementById(`btn-skill-${i}`).disabled = true;
-            }
-        }
-
-        // 2. 攻撃と状態異常の判定
-        function performAttack(attacker, defender, skill) {
-            let result = { damage: 0, isMiss: true, isCrit: false, addedStatus: null };
+        // 技が選ばれた時（今回は自動でランダムな敵をターゲットにします）
+        window.selectSkill = function(skillIndex) {
+            let actor = players[currentPlayerIndex];
+            let skill = actor.skills[skillIndex];
             
-            let hitChance = skill.accuracy - defender.eva;
-            if (Math.random() > hitChance) return result;
+            let aliveEnemies = enemies.filter(e => e.hp > 0);
+            if(aliveEnemies.length === 0) return;
+            let target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
 
-            result.isMiss = false;
+            roundActions.push({ actor: actor, target: target, skill: skill });
+            actor.skills[skillIndex].currentCt = skill.maxCt; // CT消費
 
-            // ダメージ計算
-            let baseDamage = attacker.atk - (defender.def / 2);
-            let randomFactor = (Math.random() * 0.3) + 0.85; 
-            let finalDamage = Math.floor(baseDamage * randomFactor * skill.power);
-            result.damage = Math.max(1, finalDamage);
+            currentPlayerIndex++;
+            startCommandInput(); // 次のキャラへ
+        };
 
-            if (Math.random() < attacker.crit) {
-                result.isCrit = true;
-                result.damage = Math.floor(result.damage * 1.5);
-            }
-
-            // 状態異常の付与判定
-            if (skill.effect) {
-                let statusChance = skill.effectChance - defender.resist[skill.effect];
-                if (Math.random() < statusChance) {
-                    defender.status[skill.effect] = (skill.effect === "poison") ? 3 : 2; // 毒は3ターン、麻痺は2ターン
-                    result.addedStatus = skill.effect;
+        // 3. バトル実行フェーズ
+        function executeRound() {
+            addLog(`<div class="sys-text">【ROUND ${roundCount}】 行動開始！</div>`);
+            
+            // 敵の行動もランダムで決定して追加
+            enemies.forEach(e => {
+                if(e.hp > 0) {
+                    let alivePlayers = players.filter(p => p.hp > 0);
+                    if(alivePlayers.length > 0) {
+                        let target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+                        roundActions.push({ actor: e, target: target, skill: e.skills[0] });
+                    }
                 }
-            }
-
-            return result;
-        }
-
-        // 3. ターンの進行
-        function startTurn(skillIndex) {
-            if (player.hp <= 0 || enemy.hp <= 0) return;
-            disableAllButtons();
-
-            let pSkill = player.skills[skillIndex];
-            pSkill.currentCt = pSkill.maxCt;
-
-            let actions = [
-                { actor: player, target: enemy, skill: pSkill },
-                { actor: enemy, target: player, skill: enemy.skills[0] }
-            ];
-
-            // 速度順に並び替え（リーフロングは遅いので後攻になります）
-            actions.sort((a, b) => {
-                if (a.actor.spd === b.actor.spd) return Math.random() - 0.5;
-                return b.actor.spd - a.actor.spd;
             });
 
+            // 全員の行動を速度(spd)順に並び替え
+            roundActions.sort((a, b) => b.actor.spd - a.actor.spd);
+
             function processAction(index) {
-                if (index >= actions.length || player.hp <= 0 || enemy.hp <= 0) {
-                    endTurn();
+                // 勝敗チェック
+                let aliveP = players.filter(p => p.hp > 0).length;
+                let aliveE = enemies.filter(e => e.hp > 0).length;
+                
+                if (aliveP === 0) {
+                    addLog(`<div class="sys-text">パーティは全滅した...</div>`);
+                    return;
+                }
+                if (aliveE === 0) {
+                    addLog(`<div class="sys-text">勝利！敵の洗脳を解いた！</div>`);
                     return;
                 }
 
-                let act = actions[index];
-                let icon = act.actor === player ? "▶" : "▷";
-                let actionDelay = 800;
+                if (index >= roundActions.length) {
+                    endRound(); // 全員の行動が終わったら次のラウンドへ
+                    return;
+                }
 
-                // ① 麻痺のチェック（行動前に判定）
-                if (act.actor.status.paralysis > 0) {
-                    act.actor.status.paralysis--; // ターンを消費
-                    if (Math.random() < 0.5) {
-                        addLog(`${icon} ${act.actor.name}は<span class="para-text">体がしびれて動けない！</span>`);
-                        updateUI();
-                        checkPoison(act.actor, icon); // 動けなくても毒ダメージは受ける
-                        setTimeout(() => processAction(index + 1), actionDelay);
+                let act = roundActions[index];
+                let icon = players.includes(act.actor) ? "▶" : "▷";
+
+                // 行動者が倒れていたらスキップ
+                if (act.actor.hp <= 0) {
+                    processAction(index + 1);
+                    return;
+                }
+
+                // ターゲットが倒れていたら、別の生きている敵（味方）に攻撃を振り直す
+                if (act.target.hp <= 0) {
+                    let targets = players.includes(act.actor) ? enemies : players;
+                    let aliveTargets = targets.filter(t => t.hp > 0);
+                    if (aliveTargets.length > 0) {
+                        act.target = aliveTargets[Math.floor(Math.random() * aliveTargets.length)];
+                    } else {
+                        processAction(index + 1);
                         return;
                     }
                 }
 
-                // ② 攻撃の実行
-                let result = performAttack(act.actor, act.target, act.skill);
-                
-                if (result.isMiss) {
-                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ <span class="miss-text">...しかし避けられた！（ミス）</span>`);
+                // 攻撃とダメージ計算
+                let hitChance = act.skill.accuracy - act.target.eva;
+                if (Math.random() > hitChance) {
+                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ <span class="miss-text">...外れた！</span>`);
                 } else {
-                    act.target.hp = Math.max(0, act.target.hp - result.damage);
-                    let critText = result.isCrit ? `<span class="crit-text">会心の一撃！！</span> ` : "";
-                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ ${critText}${act.target.name}に ${result.damage} のダメージ！`);
+                    let baseDamage = act.actor.atk - (act.target.def / 2);
+                    let finalDamage = Math.floor(Math.max(1, baseDamage * ((Math.random() * 0.3) + 0.85) * act.skill.power));
                     
-                    // 状態異常が付与された時のログ
-                    if (result.addedStatus === "poison") {
-                        addLog(`☁️ ${act.target.name}は<span class="poison-text">毒</span>を浴びた！`);
-                    } else if (result.addedStatus === "paralysis") {
-                        addLog(`⚡ ${act.target.name}は<span class="para-text">麻痺</span>してしまった！`);
+                    let critText = "";
+                    if (Math.random() < act.actor.crit) {
+                        finalDamage = Math.floor(finalDamage * 1.5);
+                        critText = `<span class="crit-text">会心！</span> `;
+                    }
+
+                    act.target.hp = Math.max(0, act.target.hp - finalDamage);
+                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ ${critText}${act.target.name}に ${finalDamage} ダメージ！`);
+
+                    if (act.skill.effect === "poison" && Math.random() < (act.skill.effectChance - act.target.resist.poison)) {
+                        act.target.status.poison = 3;
+                        addLog(`☁️ ${act.target.name}は毒を浴びた！`);
                     }
                 }
 
                 updateUI();
 
-                // 敵を倒したか判定
-                if (enemy.hp <= 0) {
-                    addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
-                    return;
-                }
-
-                // ③ 毒のチェック（行動後に判定）
-                checkPoison(act.actor, icon);
-
-                if (player.hp <= 0) {
-                    addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
-                    return;
-                }
-
-                setTimeout(() => {
-                    processAction(index + 1);
-                }, actionDelay);
+                setTimeout(() => { processAction(index + 1); }, 700);
             }
 
             processAction(0);
         }
 
-        // 毒のダメージ処理
-        function checkPoison(char, icon) {
-            if (char.status.poison > 0) {
-                char.status.poison--;
-                let poisonDamage = Math.max(1, Math.floor(char.maxHp * 0.1)); // 最大HPの10%（最低1ダメージ）
-                char.hp = Math.max(0, char.hp - poisonDamage);
-                addLog(`${icon} ${char.name}は<span class="poison-text">毒のダメージ</span>を受けた！（${poisonDamage}ダメージ）`);
-                updateUI();
-            }
+        // ラウンド終了処理
+        function endRound() {
+            // 毒ダメージの処理とCTの減少を全員に行う
+            let allChars = players.concat(enemies);
+            allChars.forEach(char => {
+                if (char.hp > 0) {
+                    if (char.status.poison > 0) {
+                        char.status.poison--;
+                        let pDmg = Math.max(1, Math.floor(char.maxHp * 0.1));
+                        char.hp = Math.max(0, char.hp - pDmg);
+                        addLog(`☁️ ${char.name}は毒で ${pDmg} ダメージ！`);
+                    }
+                    if (char.skills) {
+                        char.skills.forEach(s => { if (s.currentCt > 0) s.currentCt--; });
+                    }
+                }
+            });
+
+            updateUI();
+
+            // 勝敗がついていなければ、次のターンのコマンド入力へ戻る
+            setTimeout(() => {
+                let aliveP = players.filter(p => p.hp > 0).length;
+                let aliveE = enemies.filter(e => e.hp > 0).length;
+                if(aliveP > 0 && aliveE > 0) {
+                    roundCount++;
+                    roundActions = [];
+                    currentPlayerIndex = 0;
+                    startCommandInput();
+                }
+            }, 1000);
         }
 
-        function endTurn() {
-            for(let i=0; i<3; i++) {
-                if(player.skills[i].currentCt > 0) player.skills[i].currentCt--;
-            }
-            setTimeout(() => {
-                updateUI();
-            }, 500);
-        }
+        // ゲーム起動時の初期化
+        updateUI();
+        startCommandInput();
+
     </script>
 </body>
 </html>
