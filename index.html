@@ -12,14 +12,15 @@
         .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
         .enemy-hp .hp-fill { background: #f44336; }
         
-        /* コマンドボタンを縦並びにきれいに配置 */
         .command-area { display: flex; flex-direction: column; gap: 10px; align-items: center; }
         button { padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px; transition: 0.2s;}
         button:active { background: #1976d2; transform: scale(0.98); }
-        /* CT中（押せない状態）のボタンデザイン */
         button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
         
-        #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px;}
+        #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.5;}
+        /* ログの色分け用クラス */
+        .crit-text { color: #ffeb3b; font-weight: bold; }
+        .miss-text { color: #9e9e9e; font-style: italic; }
     </style>
 </head>
 <body>
@@ -48,16 +49,19 @@
     <div id="log">野生のプチフレアが現れた！<br>バトル開始！<br></div>
 
     <script>
-        // 1. ステータスと「技（スキル）」データの準備
+        // 1. ステータスに「クリティカル率(crit)」「回避率(eva)」「技の命中率(accuracy)」を追加
         let player = { 
-            name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10,
+            name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10, crit: 0.05, eva: 0.0,
             skills: [
-                { name: "ひっかく", power: 1.0, maxCt: 0, currentCt: 0 },
-                { name: "フレイムブレス", power: 1.5, maxCt: 3, currentCt: 0 },
-                { name: "渾身の一撃", power: 2.0, maxCt: 4, currentCt: 0 }
+                { name: "ひっかく", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 },       // 命中100%
+                { name: "フレイムブレス", power: 1.5, maxCt: 3, currentCt: 0, accuracy: 0.9 }, // 命中90%
+                { name: "渾身の一撃", power: 2.0, maxCt: 4, currentCt: 0, accuracy: 0.8 }  // 命中80%
             ]
         };
-        let enemy = { name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8 };
+        // 敵は10%の確率で攻撃を避ける素早い設定
+        let enemy = { name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8, crit: 0.05, eva: 0.1,
+            skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 } ]
+        };
 
         function addLog(message) {
             const logDiv = document.getElementById("log");
@@ -65,7 +69,6 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        // 画面のHPとボタンのCT表示を更新する機能
         function updateUI() {
             document.getElementById("player-hp-text").innerText = `HP: ${player.hp} / ${player.maxHp}`;
             document.getElementById("player-hp-fill").style.width = `${(player.hp / player.maxHp) * 100}%`;
@@ -73,68 +76,88 @@
             document.getElementById("enemy-hp-text").innerText = `HP: ${enemy.hp} / ${enemy.maxHp}`;
             document.getElementById("enemy-hp-fill").style.width = `${(enemy.hp / enemy.maxHp) * 100}%`;
 
-            // 技ボタンの更新（CTが0より大きい場合は押せなくして、残りターンを表示）
             for(let i = 0; i < 3; i++) {
                 let btn = document.getElementById(`btn-skill-${i}`);
                 let skill = player.skills[i];
-                
                 if(skill.currentCt > 0) {
                     btn.innerText = `${skill.name} (あと${skill.currentCt}ターン)`;
                     btn.disabled = true;
                 } else {
                     btn.innerText = skill.name;
-                    if(player.hp > 0 && enemy.hp > 0) {
-                        btn.disabled = false; // HPがある時は押せるように戻す
-                    }
+                    if(player.hp > 0 && enemy.hp > 0) btn.disabled = false;
                 }
             }
         }
 
-        // 2. ダメージ計算（技の威力倍率を掛け算に追加）
-        function calcDamage(atk, def, powerRatio) {
-            let baseDamage = atk - (def / 2);
+        // 2. 攻撃の判定処理（命中・回避・クリティカルをすべて計算する関数）
+        function performAttack(attacker, defender, skill) {
+            // ① 命中判定 (技の命中率 - 相手の回避率)
+            let hitChance = skill.accuracy - defender.eva;
+            if (Math.random() > hitChance) {
+                return { damage: 0, isMiss: true, isCrit: false }; // 外れた！
+            }
+
+            // ② ダメージ計算 (基本計算 × 乱数 × 技威力)
+            let baseDamage = attacker.atk - (defender.def / 2);
             let randomFactor = (Math.random() * 0.3) + 0.85; 
-            let finalDamage = Math.floor(baseDamage * randomFactor * powerRatio);
-            return Math.max(1, finalDamage);
+            let finalDamage = Math.floor(baseDamage * randomFactor * skill.power);
+            finalDamage = Math.max(1, finalDamage);
+
+            // ③ クリティカル判定 (5%の確率でダメージ1.5倍)
+            let isCrit = false;
+            if (Math.random() < attacker.critRate) {
+                isCrit = true;
+                finalDamage = Math.floor(finalDamage * 1.5);
+            }
+
+            return { damage: finalDamage, isMiss: false, isCrit: isCrit };
         }
 
-        // 3. 技ボタンを押した時の処理（引数でどの技を選んだか受け取る）
+        // 3. ターンの進行
         function executeTurn(skillIndex) {
             if (player.hp <= 0 || enemy.hp <= 0) return;
 
-            let skill = player.skills[skillIndex];
+            let pSkill = player.skills[skillIndex];
+            pSkill.currentCt = pSkill.maxCt; // CT発生
+            disableAllButtons();
 
-            // プレイヤーの攻撃
-            let pDamage = calcDamage(player.atk, enemy.def, skill.power);
-            enemy.hp = Math.max(0, enemy.hp - pDamage);
-            addLog(`▶ ${player.name}の ${skill.name}！ ${enemy.name}に ${pDamage} のダメージ！`);
+            // プレイヤーの攻撃処理
+            let pResult = performAttack(player, enemy, pSkill);
             
-            // 使った技のCTを最大値にセットする
-            skill.currentCt = skill.maxCt;
+            if (pResult.isMiss) {
+                addLog(`▶ ${player.name}の ${pSkill.name}！ <span class="miss-text">...しかし避けられた！（ミス）</span>`);
+            } else {
+                enemy.hp = Math.max(0, enemy.hp - pResult.damage);
+                let critText = pResult.isCrit ? `<span class="crit-text">会心の一撃！！</span> ` : "";
+                addLog(`▶ ${player.name}の ${pSkill.name}！ ${critText}${enemy.name}に ${pResult.damage} のダメージ！`);
+            }
+            
             updateUI();
             
             if (enemy.hp <= 0) {
                 addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
-                disableAllButtons();
                 return;
             }
 
-            // 敵の反撃中はすべてのボタンを押せなくする
-            disableAllButtons(); 
-            
+            // 敵の反撃処理（少し遅れて発生）
             setTimeout(() => {
-                let eDamage = calcDamage(enemy.atk, player.def, 1.0); // 敵は通常攻撃
-                player.hp = Math.max(0, player.hp - eDamage);
-                addLog(`▷ ${enemy.name}の反撃！ ${player.name}に ${eDamage} のダメージ！`);
+                let eSkill = enemy.skills[0];
+                let eResult = performAttack(enemy, player, eSkill);
                 
-                // ターン終了時：プレイヤーの全技のCTを1減らす
+                if (eResult.isMiss) {
+                    addLog(`▷ ${enemy.name}の ${eSkill.name}！ <span class="miss-text">...しかし外れた！（ミス）</span>`);
+                } else {
+                    player.hp = Math.max(0, player.hp - eResult.damage);
+                    let critText = eResult.isCrit ? `<span class="crit-text">痛恨の一撃！！</span> ` : "";
+                    addLog(`▷ ${enemy.name}の ${eSkill.name}！ ${critText}${player.name}に ${eResult.damage} のダメージ！`);
+                }
+                
+                // CTを減らす
                 for(let i=0; i<3; i++) {
-                    if(player.skills[i].currentCt > 0) {
-                        player.skills[i].currentCt--;
-                    }
+                    if(player.skills[i].currentCt > 0) player.skills[i].currentCt--;
                 }
 
-                updateUI(); // CT減少を画面に反映してボタンを復活させる
+                updateUI();
                 
                 if (player.hp <= 0) {
                     addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
