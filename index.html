@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ドラグマキア - プロトタイプ</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #222; color: #fff; margin: 0; padding: 20px; }
+        .battle-area { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .character { background: #333; padding: 15px; border-radius: 8px; width: 40%; }
+        .hp-bar { background: #555; height: 20px; border-radius: 10px; margin-top: 10px; overflow: hidden;}
+        .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
+        .enemy-hp .hp-fill { background: #f44336; }
+        button { padding: 15px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px;}
+        button:active { background: #1976d2; }
+        #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px;}
+    </style>
+</head>
+<body>
+
+    <h1>ドラグマキア</h1>
+
+    <div class="battle-area">
+        <div class="character">
+            <h3>レッドウィング</h3>
+            <div id="player-hp-text">HP: 35 / 35</div>
+            <div class="hp-bar"><div id="player-hp-fill" class="hp-fill"></div></div>
+        </div>
+        <div class="character">
+            <h3>プチフレア</h3>
+            <div id="enemy-hp-text">HP: 25 / 25</div>
+            <div class="hp-bar enemy-hp"><div id="enemy-hp-fill" class="hp-fill"></div></div>
+        </div>
+    </div>
+
+    <button id="attack-btn" onclick="executeTurn()">たたかう（通常攻撃）</button>
+
+    <div id="log">野生のプチフレアが現れた！<br>バトル開始！<br></div>
+
+    <script>
+        // 1. ステータスデータの準備
+        let player = { name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10 };
+        let enemy = { name: "プチフレア", maxHp: 25, hp: 25, atk: 12, def: 8 };
+
+        // バトルログを追加する機能
+        function addLog(message) {
+            const logDiv = document.getElementById("log");
+            logDiv.innerHTML += message + "<br>";
+            logDiv.scrollTop = logDiv.scrollHeight; // 常に最新のログを下までスクロール
+        }
+
+        // 画面のHP表示を更新する機能
+        function updateUI() {
+            document.getElementById("player-hp-text").innerText = `HP: ${player.hp} / ${player.maxHp}`;
+            document.getElementById("player-hp-fill").style.width = `${(player.hp / player.maxHp) * 100}%`;
+            
+            document.getElementById("enemy-hp-text").innerText = `HP: ${enemy.hp} / ${enemy.maxHp}`;
+            document.getElementById("enemy-hp-fill").style.width = `${(enemy.hp / enemy.maxHp) * 100}%`;
+        }
+
+        // 2. ダメージ計算のルール（乱数 85%〜115%）
+        function calcDamage(atk, def) {
+            let baseDamage = atk - (def / 2);
+            let randomFactor = (Math.random() * 0.3) + 0.85; 
+            let finalDamage = Math.floor(baseDamage * randomFactor);
+            return Math.max(1, finalDamage); // 最低でも1ダメージは与える
+        }
+
+        // 3. たたかうボタンを押した時の処理
+        function executeTurn() {
+            if (player.hp <= 0 || enemy.hp <= 0) return; // どちらかが倒れていたらストップ
+
+            // プレイヤーの攻撃
+            let pDamage = calcDamage(player.atk, enemy.def);
+            enemy.hp = Math.max(0, enemy.hp - pDamage);
+            addLog(`▶ ${player.name}の攻撃！ ${enemy.name}に ${pDamage} のダメージ！`);
+            updateUI();
+            
+            if (enemy.hp <= 0) {
+                addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
+                document.getElementById("attack-btn").disabled = true;
+                return;
+            }
+
+            // 敵の反撃（少し遅らせて演出っぽくする）
+            setTimeout(() => {
+                let eDamage = calcDamage(enemy.atk, player.def);
+                player.hp = Math.max(0, player.hp - eDamage);
+                addLog(`▷ ${enemy.name}の反撃！ ${player.name}に ${eDamage} のダメージ！`);
+                updateUI();
+                
+                if (player.hp <= 0) {
+                    addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
+                    document.getElementById("attack-btn").disabled = true;
+                }
+            }, 800); 
+        }
+    </script>
+</body>
+</html>
