@@ -5,316 +5,397 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ドラグマキア - プロトタイプ</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background-color: #222; color: #fff; margin: 0; padding: 10px; }
+        body { font-family: sans-serif; text-align: center; background-color: #111; color: #fff; margin: 0; padding: 0; padding-bottom: 20px; }
+        h1 { margin: 10px 0; font-size: 20px; color: #e91e63; }
+        h2 { border-bottom: 2px solid #4caf50; padding-bottom: 5px; margin-bottom: 15px; color: #4caf50; }
         
-        .party-area { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .character { background: #333; padding: 10px; border-radius: 8px; width: 30%; font-size: 12px; position: relative; transition: 0.2s; border: 2px solid transparent; }
-        .character h3 { margin: 5px 0; font-size: 14px; }
-        
-        .hp-bar { background: #555; height: 15px; border-radius: 8px; margin-top: 5px; overflow: hidden;}
-        .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
-        .enemy-party .hp-fill { background: #f44336; }
-        
-        .status-box { height: 18px; font-size: 12px; margin-top: 5px; font-weight: bold; }
-        .status-poison { color: #e040fb; }
-        .dead { opacity: 0.3; filter: grayscale(100%); }
-        
-        /* ターゲット選択中のキラキラエフェクト */
-        .targeting { cursor: pointer; border: 2px solid #ffeb3b; box-shadow: 0 0 10px #ffeb3b; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        /* 画面切り替え用 */
+        .screen { display: none; padding: 10px; max-width: 600px; margin: 0 auto; }
+        .active-screen { display: block; }
 
-        .command-area { background: #111; padding: 10px; border-radius: 8px; margin-bottom: 10px; min-height: 120px;}
-        .command-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #4caf50; }
-        .btn-group { display: flex; flex-direction: column; gap: 8px; align-items: center; }
-        
-        button { padding: 12px 20px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px;}
-        button:active { background: #1976d2; transform: scale(0.98); }
-        button:disabled { background: #555; color: #888; cursor: not-allowed; }
-        .btn-cancel { background: #f44336; }
-        .btn-cancel:active { background: #d32f2f; }
-        
-        #log { height: 180px; overflow-y: scroll; background: #000; padding: 10px; border-radius: 8px; text-align: left; font-size: 13px; line-height: 1.5;}
-        .crit-text { color: #ffeb3b; font-weight: bold; }
-        .miss-text { color: #9e9e9e; font-style: italic; }
+        /* 共通UIパーツ */
+        .panel { background: #222; padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        button { padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; margin-bottom: 10px; transition: 0.2s; }
+        button:active { transform: scale(0.98); background: #1976d2; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
+        .btn-red { background: #f44336; } .btn-red:active { background: #d32f2f; }
+        .btn-green { background: #4caf50; } .btn-green:active { background: #388e3c; }
+        .btn-small { padding: 8px 12px; font-size: 12px; width: auto; margin: 0 5px; }
+
+        /* キャラクター表示（リスト・バトル共通） */
+        .char-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        .character { background: #333; padding: 8px; border-radius: 8px; font-size: 12px; position: relative; border: 2px solid transparent; }
+        .character h3 { margin: 3px 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hp-bar { background: #555; height: 10px; border-radius: 5px; margin-top: 5px; overflow: hidden;}
+        .hp-fill { background: #4caf50; height: 100%; width: 100%; }
+        .enemy-side .hp-fill { background: #f44336; }
+        .dead { opacity: 0.5; filter: grayscale(100%); }
+        .selected { border-color: #ffeb3b; background: #444; }
+
+        /* 合成画面用 */
+        .fusion-slot { background: #222; padding: 15px; border-radius: 8px; border: 2px dashed #555; min-height: 80px; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #666; }
+        .fusion-arrow { font-size: 24px; margin: 10px 0; color: #ffeb3b; font-weight: bold; }
+
+        /* バトル画面用調整 */
+        .battle-party { display: flex; justify-content: space-around; gap: 5px; }
+        .battle-char { width: 30%; }
+        #log { height: 150px; overflow-y: scroll; background: #000; padding: 10px; border-radius: 8px; text-align: left; font-size: 12px; line-height: 1.4; margin-bottom: 10px; }
         .sys-text { color: #4fc3f7; font-weight: bold; border-top: 1px solid #333; margin-top: 5px; padding-top: 5px;}
-        .heal-text { color: #4caf50; font-weight: bold; }
+        .dmg-text { color: #ff5252; } .heal-text { color: #4caf50; }
+        .targeting { border-color: #ffeb3b; animation: pulse 0.8s infinite alternate; cursor: pointer; }
+        @keyframes pulse { from { box-shadow: 0 0 5px #ffeb3b; } to { box-shadow: 0 0 15px #ffeb3b; } }
     </style>
 </head>
 <body>
+    <h1>ドラグマキア・プロト</h1>
 
-    <h1>ドラグマキア</h1>
-
-    <div class="party-area enemy-party" id="enemy-party-div"></div>
-    <div style="margin: 10px 0; font-weight: bold;">VS</div>
-    <div class="party-area" id="player-party-div"></div>
-
-    <div class="command-area" id="command-area">
-        <div id="command-title" class="command-title">コマンド入力</div>
-        <div class="btn-group" id="btn-group"></div>
+    <div id="home-screen" class="screen active-screen">
+        <div class="panel">
+            <h2>現在のパーティ</h2>
+            <div id="home-party-list" class="char-list"></div>
+        </div>
+        <div style="margin-top: 20px;">
+            <button class="btn-red" onclick="startQuest()">⚔️ クエストに出発 (バトル)</button>
+            <button class="btn-green" onclick="showScreen('fusion-screen'); updateFusionUI();">🧬 竜合成ラボへ (強化)</button>
+        </div>
     </div>
 
-    <div id="log">バトル開始！<br></div>
+    <div id="fusion-screen" class="screen">
+        <h2>竜合成ラボ</h2>
+        <div class="panel" style="background: #333;">
+            <div>▼ ベース選択 (強化したい竜) ▼</div>
+            <div id="base-slot" class="fusion-slot">選択してください</div>
+            <div class="fusion-arrow">＋</div>
+            <div>▼ 素材選択 (消費する竜) ▼</div>
+            <div id="material-slot" class="fusion-slot">選択してください</div>
+        </div>
+        <button id="fusion-btn" disabled onclick="executeFusion()">合成実行！ (HP+10, 攻+2)</button>
+        <button class="btn-red" onclick="showScreen('home-screen'); resetFusionSelection();">ホームに戻る</button>
+
+        <div class="panel">
+            <h3>所持ドラゴン一覧</h3>
+            <p style="font-size:12px; color:#aaa;">※タップで選択。素材にした竜は消えます。</p>
+            <div id="fusion-list" class="char-list" style="grid-template-columns: repeat(4, 1fr);"></div>
+        </div>
+    </div>
+
+    <div id="battle-screen" class="screen">
+        <div class="panel" style="padding: 10px; background: #1a1a1a;">
+            <div id="enemy-party-div" class="battle-party enemy-side"></div>
+        </div>
+        <div style="font-weight: bold; margin: 5px 0; font-size: 14px;">VS</div>
+        <div class="panel" style="padding: 10px; background: #1a1a1a;">
+            <div id="player-party-div" class="battle-party"></div>
+        </div>
+        
+        <div id="log">バトルログ<br></div>
+
+        <div id="command-area" class="panel">
+            <div id="command-title" style="color: #4caf50; font-weight: bold; margin-bottom: 8px;">コマンド</div>
+            <div id="btn-group"></div>
+        </div>
+    </div>
+
 
     <script>
-        // 1. 技データに「type(種類)」「targetType(対象)」を追加
-        let players = [
-            { id: "p0", name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10, spd: 15, crit: 0.05, eva: 0.0, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [
-                { name: "ひっかく", type: "attack", targetType: "single-enemy", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 },
-                { name: "フレイムブレス", type: "attack", targetType: "all-enemies", power: 0.8, maxCt: 3, currentCt: 0, accuracy: 0.9 } // 全体攻撃（少し威力が低い）
-              ]
-            },
-            { id: "p1", name: "アクアサーペント", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 12, crit: 0.05, eva: 0.0, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [
-                { name: "水鉄砲", type: "attack", targetType: "single-enemy", power: 1.2, maxCt: 0, currentCt: 0, accuracy: 1.0 },
-                { name: "癒やしのしずく", type: "heal", targetType: "single-ally", power: 2.0, maxCt: 3, currentCt: 0, accuracy: 1.0 } // 回復技（味方単体）
-              ]
-            },
-            { id: "p2", name: "リーフロング", maxHp: 45, hp: 45, atk: 10, def: 15, spd: 8, crit: 0.05, eva: 0.0, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [
-                { name: "たいあたり", type: "attack", targetType: "single-enemy", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 },
-                { name: "ポイズンブレス", type: "attack", targetType: "single-enemy", power: 0.5, maxCt: 3, currentCt: 0, accuracy: 0.9, effect: "poison", effectChance: 0.7 }
-              ]
-            }
+        // =========================================
+        // 📊 データ管理 (グローバル変数)
+        // =========================================
+        // プレイヤーの所持ドラゴン（パーティメンバー）
+        let myDragons = [
+            { id: "p1", name: "レッドウィング", maxHp: 50, hp: 50, atk: 20, def: 10, spd: 15, skills: [
+                { name: "ひっかく", type: "attack", target: "single_e", power: 1.0, ct: 0, maxCt: 0, acc: 1.0 },
+                { name: "フレイムブレス", type: "attack", target: "all_e", power: 0.8, ct: 0, maxCt: 3, acc: 0.9 }
+            ]},
+            { id: "p2", name: "アクアサーペント", maxHp: 45, hp: 45, atk: 8, def: 8, spd: 12, skills: [
+                { name: "水鉄砲", type: "attack", target: "single_e", power: 1.2, ct: 0, maxCt: 0, acc: 1.0 },
+                { name: "癒やしの波", type: "heal", target: "all_a", power: 1.5, ct: 0, maxCt: 4, acc: 1.0 }
+            ]},
+            { id: "p3", name: "リーフロング", maxHp: 60, hp: 60, atk: 12, def: 15, spd: 8, skills: [
+                { name: "たいあたり", type: "attack", target: "single_e", power: 1.0, ct: 0, maxCt: 0, acc: 1.0 },
+                { name: "ポイズンブレス", type: "attack", target: "single_e", power: 0.5, ct: 0, maxCt: 3, acc: 0.9, eff: "poison" }
+            ]}
+        ];
+        // 合成素材用の控えドラゴン（テスト用データ）
+        let materialDragons = [
+            { id: "m1", name: "プチフレア(素材)", maxHp: 20, hp: 20, atk: 5, def: 5, spd: 5 },
+            { id: "m2", name: "プチアクア(素材)", maxHp: 20, hp: 20, atk: 5, def: 5, spd: 5 },
+            { id: "m3", name: "プチリーフ(素材)", maxHp: 20, hp: 20, atk: 5, def: 5, spd: 5 }
         ];
 
-        let enemies = [
-            { id: "e0", name: "プチフレアA", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 10, crit: 0.05, eva: 0.1, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [ { name: "体当たり", type: "attack", targetType: "single-enemy", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 } ] },
-            { id: "e1", name: "プチフレアB", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 11, crit: 0.05, eva: 0.1, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [ { name: "体当たり", type: "attack", targetType: "single-enemy", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 } ] },
-            { id: "e2", name: "プチフレアC", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 9, crit: 0.05, eva: 0.1, status: { poison: 0 }, resist: { poison: 0 },
-              skills: [ { name: "体当たり", type: "attack", targetType: "single-enemy", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 } ] }
-        ];
+        // バトル用の一時データ
+        let battleState = { players: [], enemies: [], actions: [], turnIdx: 0, round: 1, targetingMode: null };
+        // 合成用の一時データ
+        let fusionState = { baseId: null, materialId: null };
 
-        let roundActions = []; 
-        let currentPlayerIndex = 0;
-        let roundCount = 1;
-        
-        // ターゲット選択モードの管理変数
-        let isTargeting = false;
-        let pendingSkill = null;
-
-        function addLog(message) {
-            const logDiv = document.getElementById("log");
-            logDiv.innerHTML += message + "<br>";
-            logDiv.scrollTop = logDiv.scrollHeight;
+        // =========================================
+        // 🖥️ 画面遷移・共通処理
+        // =========================================
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+            document.getElementById(screenId).classList.add('active-screen');
+            if(screenId === 'home-screen') updateHomeUI();
         }
 
-        // UI描画（ターゲット選択中は特定のキャラを光らせ、クリック可能にする）
-        function updateUI() {
-            function renderParty(party, divId, side) {
-                let html = "";
-                party.forEach((char, index) => {
-                    let deadClass = char.hp <= 0 ? "dead" : "";
-                    
-                    // ターゲット選択中の光るエフェクトの判定
-                    let targetClass = "";
-                    let clickEvent = "";
-                    if (isTargeting && char.hp > 0) {
-                        if (pendingSkill.targetType === "single-enemy" && side === "enemy") {
-                            targetClass = "targeting"; clickEvent = `onclick="selectTarget('${side}', ${index})"`;
-                        }
-                        if (pendingSkill.targetType === "single-ally" && side === "player") {
-                            targetClass = "targeting"; clickEvent = `onclick="selectTarget('${side}', ${index})"`;
-                        }
-                    }
+        // キャラクターのHTMLを生成するヘルパー関数
+        function createCharHtml(char, isSmall = false) {
+            let hpPer = (char.hp / char.maxHp) * 100;
+            return `
+                <div class="character ${isSmall ? 'battle-char' : ''} ${char.hp <= 0 ? 'dead' : ''}" id="char-${char.id}">
+                    <h3>${char.name}</h3>
+                    <div>HP: ${char.hp}/${char.maxHp} <small>(攻:${char.atk})</small></div>
+                    <div class="hp-bar"><div class="hp-fill" style="width:${hpPer}%"></div></div>
+                </div>`;
+        }
 
-                    let hpPercent = (char.hp / char.maxHp) * 100;
-                    let poisonText = char.status.poison > 0 ? `<span class="status-poison">【毒】</span>` : "";
-                    
-                    html += `
-                    <div class="character ${deadClass} ${targetClass}" ${clickEvent}>
-                        <h3>${char.name}</h3>
-                        <div>HP: ${char.hp}/${char.maxHp}</div>
-                        <div class="hp-bar"><div class="hp-fill" style="width: ${hpPercent}%"></div></div>
-                        <div class="status-box">${poisonText}</div>
+        // =========================================
+        // 🏠 ホーム画面ロジック
+        // =========================================
+        function updateHomeUI() {
+            let html = myDragons.map(d => createCharHtml(d)).join('');
+            document.getElementById('home-party-list').innerHTML = html;
+        }
+
+        // =========================================
+        // 🧬 合成画面ロジック
+        // =========================================
+        function updateFusionUI() {
+            let allDragons = [...myDragons, ...materialDragons];
+            let html = allDragons.map(d => {
+                let isSelected = (d.id === fusionState.baseId || d.id === fusionState.materialId);
+                return `<div class="character ${isSelected ? 'selected' : ''}" onclick="selectFusionChar('${d.id}')">
+                        <h3>${d.name}</h3>
+                        <div style="font-size:10px;">HP:${d.maxHp} 攻:${d.atk}</div>
                     </div>`;
-                });
-                document.getElementById(divId).innerHTML = html;
-            }
-            renderParty(players, "player-party-div", "player");
-            renderParty(enemies, "enemy-party-div", "enemy");
+            }).join('');
+            document.getElementById('fusion-list').innerHTML = html;
+
+            // スロットの表示更新
+            let base = allDragons.find(d => d.id === fusionState.baseId);
+            let material = allDragons.find(d => d.id === fusionState.materialId);
+            document.getElementById('base-slot').innerHTML = base ? createCharHtml(base) : "選択してください";
+            document.getElementById('material-slot').innerHTML = material ? createCharHtml(material) : "選択してください";
+            document.getElementById('fusion-btn').disabled = !(base && material);
         }
 
-        function startCommandInput() {
-            isTargeting = false;
-            pendingSkill = null;
-
-            while(currentPlayerIndex < players.length && players[currentPlayerIndex].hp <= 0) {
-                currentPlayerIndex++;
-            }
-
-            if (currentPlayerIndex >= players.length) {
-                document.getElementById("command-area").style.display = "none";
-                executeRound();
-                return;
-            }
-
-            updateUI(); // 通常のUIに戻す
-            document.getElementById("command-area").style.display = "block";
-            let activePlayer = players[currentPlayerIndex];
-            document.getElementById("command-title").innerText = `▼ ${activePlayer.name}の行動選択 ▼`;
-            
-            let btnHtml = "";
-            activePlayer.skills.forEach((skill, idx) => {
-                if(skill.currentCt > 0) {
-                    btnHtml += `<button disabled>${skill.name} (あと${skill.currentCt})</button>`;
-                } else {
-                    btnHtml += `<button onclick="prepareSkill(${idx})">${skill.name}</button>`;
-                }
-            });
-            document.getElementById("btn-group").innerHTML = btnHtml;
-        }
-
-        // 2. 技ボタンを押した時の処理（すぐに行動決定せず、ターゲット選択へ）
-        window.prepareSkill = function(skillIndex) {
-            let actor = players[currentPlayerIndex];
-            let skill = actor.skills[skillIndex];
-            
-            if (skill.targetType === "all-enemies" || skill.targetType === "all-allies") {
-                // 全体技ならターゲット選択不要なので即決定
-                commitAction(actor, null, skill);
+        function selectFusionChar(id) {
+            if (fusionState.baseId === null) {
+                fusionState.baseId = id;
+            } else if (fusionState.baseId === id) {
+                fusionState.baseId = null; // 選択解除
+            } else if (fusionState.materialId === id) {
+                fusionState.materialId = null; // 選択解除
             } else {
-                // 単体技ならターゲット選択モードへ
-                isTargeting = true;
-                pendingSkill = skill;
-                document.getElementById("command-title").innerText = `【${skill.name}】の対象をタップ！`;
-                document.getElementById("btn-group").innerHTML = `<button class="btn-cancel" onclick="startCommandInput()">やめる（戻る）</button>`;
-                updateUI(); // 画面のキャラを光らせる
+                fusionState.materialId = id;
             }
-        };
-
-        // 光っているキャラクターをタップした時の処理
-        window.selectTarget = function(side, index) {
-            if (!isTargeting) return;
-            let target = (side === "player" ? players : enemies)[index];
-            commitAction(players[currentPlayerIndex], target, pendingSkill);
-        };
-
-        // 行動をリストに登録して次のキャラへ
-        function commitAction(actor, target, skill) {
-            roundActions.push({ actor: actor, target: target, skill: skill });
-            skill.currentCt = skill.maxCt; 
-            currentPlayerIndex++;
-            startCommandInput();
+            updateFusionUI();
         }
 
-        // 3. 技の実行処理（回復・全体攻撃・ダメージをまとめた関数）
-        function applySkillEffect(actor, target, skill) {
-            let icon = players.includes(actor) ? "▶" : "▷";
+        function resetFusionSelection() {
+            fusionState = { baseId: null, materialId: null };
+        }
 
-            // 回復技の場合
-            if (skill.type === "heal") {
-                let healAmount = Math.floor(actor.atk * skill.power * ((Math.random() * 0.2) + 0.9)); // 攻撃力依存で回復
-                let oldHp = target.hp;
-                target.hp = Math.min(target.maxHp, target.hp + healAmount);
-                let actualHeal = target.hp - oldHp;
-                addLog(`${icon} ${actor.name}の ${skill.name}！ <span class="heal-text">${target.name}のHPが ${actualHeal} 回復！</span>`);
-                return;
-            }
+        function executeFusion() {
+            let base = myDragons.find(d => d.id === fusionState.baseId);
+            if (!base) return; // ベースはパーティ内からのみ
 
-            // 攻撃技の場合
-            let hitChance = skill.accuracy - target.eva;
-            if (Math.random() > hitChance) {
-                addLog(`${icon} ${actor.name}の ${skill.name}！ <span class="miss-text">${target.name}には外れた！</span>`);
-                return;
-            }
+            // 強化処理（簡易版：HP+10, 攻撃+2）
+            base.maxHp += 10; base.hp = base.maxHp;
+            base.atk += 2;
+            alert(`合成成功！\n${base.name}が強化されました！\n(最大HP+10, 攻撃力+2)`);
 
-            let baseDamage = actor.atk - (target.def / 2);
-            let finalDamage = Math.floor(Math.max(1, baseDamage * ((Math.random() * 0.3) + 0.85) * skill.power));
+            // 素材を削除
+            myDragons = myDragons.filter(d => d.id !== fusionState.materialId);
+            materialDragons = materialDragons.filter(d => d.id !== fusionState.materialId);
+
+            resetFusionSelection();
+            updateFusionUI();
+        }
+
+        // =========================================
+        // ⚔️ バトル画面ロジック（前回のコードを移植・調整）
+        // =========================================
+        function addLog(msg) {
+            let log = document.getElementById('log');
+            log.innerHTML += msg + "<br>"; log.scrollTop = log.scrollHeight;
+        }
+
+        function startQuest() {
+            // バトルデータの初期化（ディープコピーで元のデータを保護）
+            battleState.players = JSON.parse(JSON.stringify(myDragons));
+            // 敵データ（毎回生成）
+            battleState.enemies = [
+                { id: "e1", name: "ザコフレアA", maxHp: 30, hp: 30, atk: 10, def: 5, spd: 10, skills:[{name:"突撃",power:1.0,acc:1.0}] },
+                { id: "e2", name: "ザコフレアB", maxHp: 30, hp: 30, atk: 10, def: 5, spd: 11, skills:[{name:"突撃",power:1.0,acc:1.0}] },
+                { id: "e3", name: "ザコフレアC", maxHp: 30, hp: 30, atk: 10, def: 5, spd: 9, skills:[{name:"突撃",power:1.0,acc:1.0}] }
+            ];
+            battleState.round = 1; battleState.actions = []; battleState.turnIdx = 0;
             
-            let critText = "";
-            if (Math.random() < actor.crit) {
-                finalDamage = Math.floor(finalDamage * 1.5);
-                critText = `<span class="crit-text">会心！</span> `;
-            }
+            document.getElementById('log').innerHTML = "クエスト開始！敵が現れた！<br>";
+            showScreen('battle-screen');
+            updateBattleUI();
+            startCommandPhase();
+        }
 
-            target.hp = Math.max(0, target.hp - finalDamage);
-            addLog(`${icon} ${actor.name}の ${skill.name}！ ${critText}${target.name}に ${finalDamage} ダメージ！`);
-
-            if (skill.effect === "poison" && target.hp > 0 && Math.random() < (skill.effectChance - target.resist.poison)) {
-                target.status.poison = 3;
-                addLog(`☁️ ${target.name}は毒を浴びた！`);
+        function updateBattleUI() {
+            document.getElementById('player-party-div').innerHTML = battleState.players.map(p => createCharHtml(p, true)).join('');
+            document.getElementById('enemy-party-div').innerHTML = battleState.enemies.map(e => createCharHtml(e, true)).join('');
+            
+            // ターゲット選択モードの表示
+            if (battleState.targetingMode) {
+                let targets = battleState.targetingMode.side === 'ally' ? battleState.players : battleState.enemies;
+                targets.forEach(t => {
+                    if(t.hp > 0) document.getElementById(`char-${t.id}`).classList.add('targeting');
+                });
             }
         }
 
-        function executeRound() {
-            addLog(`<div class="sys-text">【ROUND ${roundCount}】 行動開始！</div>`);
+        // --- コマンド入力 ---
+        function startCommandPhase() {
+            battleState.targetingMode = null;
+            while(battleState.turnIdx < battleState.players.length && battleState.players[battleState.turnIdx].hp <= 0) {
+                battleState.turnIdx++;
+            }
+            if(battleState.turnIdx >= battleState.players.length) {
+                executeRoundPhase(); return;
+            }
             
-            enemies.forEach(e => {
+            let actor = battleState.players[battleState.turnIdx];
+            document.getElementById('command-area').style.display = 'block';
+            document.getElementById('command-title').innerText = `▼ ${actor.name} の行動`;
+            
+            let html = actor.skills.map((s, idx) => `
+                <button ${s.ct > 0 ? 'disabled' : ''} onclick="selectSkill(${idx})">
+                    ${s.name} ${s.ct > 0 ? '(あと'+s.ct+')' : ''}
+                </button>`).join('');
+            document.getElementById('btn-group').innerHTML = html;
+            updateBattleUI();
+        }
+
+        function selectSkill(idx) {
+            let actor = battleState.players[battleState.turnIdx];
+            let skill = actor.skills[idx];
+            
+            if(skill.target.includes('all')) {
+                commitAction(actor, skill, null);
+            } else {
+                // ターゲット選択へ
+                battleState.targetingMode = { skill: skill, side: skill.target.includes('_a') ? 'ally' : 'enemy' };
+                document.getElementById('command-title').innerText = `対象をタップしてください`;
+                document.getElementById('btn-group').innerHTML = `<button class="btn-red" onclick="startCommandPhase()">戻る</button>`;
+                updateBattleUI();
+                // タップイベントの設定
+                let targetGroup = battleState.targetingMode.side === 'ally' ? battleState.players : battleState.enemies;
+                targetGroup.forEach(t => {
+                    if(t.hp > 0) document.getElementById(`char-${t.id}`).onclick = () => commitAction(actor, skill, t);
+                });
+            }
+        }
+
+        function commitAction(actor, skill, target) {
+            skill.ct = skill.maxCt;
+            battleState.actions.push({ actor, skill, target });
+            battleState.turnIdx++;
+            startCommandPhase();
+        }
+
+        // --- バトル実行 ---
+        function executeRoundPhase() {
+            document.getElementById('command-area').style.display = 'none';
+            addLog(`<div class="sys-text">【ROUND ${battleState.round}】</div>`);
+            
+            // 敵の行動決定（ランダムターゲット）
+            battleState.enemies.forEach(e => {
                 if(e.hp > 0) {
-                    let alivePlayers = players.filter(p => p.hp > 0);
-                    if(alivePlayers.length > 0) {
-                        let target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-                        roundActions.push({ actor: e, target: target, skill: e.skills[0] });
+                    let aliveP = battleState.players.filter(p => p.hp > 0);
+                    if(aliveP.length > 0) {
+                        battleState.actions.push({ actor: e, skill: e.skills[0], target: aliveP[Math.floor(Math.random()*aliveP.length)] });
                     }
                 }
             });
+            // 速度順ソート
+            battleState.actions.sort((a, b) => b.actor.spd - a.actor.spd);
+            
+            let actIdx = 0;
+            function processNextAction() {
+                if(actIdx >= battleState.actions.length) { endRound(); return; }
+                
+                let act = battleState.actions[actIdx];
+                actIdx++;
+                if(act.actor.hp <= 0) { processNextAction(); return; } // 行動者が死んでたらスキップ
 
-            roundActions.sort((a, b) => b.actor.spd - a.actor.spd);
-
-            function processAction(index) {
-                if (players.filter(p => p.hp > 0).length === 0) { addLog(`<div class="sys-text">パーティは全滅した...</div>`); return; }
-                if (enemies.filter(e => e.hp > 0).length === 0) { addLog(`<div class="sys-text">勝利！敵の洗脳を解いた！</div>`); return; }
-
-                if (index >= roundActions.length) { endRound(); return; }
-
-                let act = roundActions[index];
-                if (act.actor.hp <= 0) { processAction(index + 1); return; }
-
-                // 全体攻撃の処理
-                if (act.skill.targetType === "all-enemies") {
-                    let targets = (players.includes(act.actor) ? enemies : players).filter(t => t.hp > 0);
-                    targets.forEach(t => applySkillEffect(act.actor, t, act.skill));
-                } 
-                // 単体技の処理（ターゲットが倒れていた場合は自動変更）
-                else {
-                    if (act.target.hp <= 0) {
-                        let targetGroup = (act.skill.targetType === "single-ally") ? 
-                            (players.includes(act.actor) ? players : enemies) : 
-                            (players.includes(act.actor) ? enemies : players);
-                        let aliveTargets = targetGroup.filter(t => t.hp > 0);
-                        if (aliveTargets.length > 0) act.target = aliveTargets[Math.floor(Math.random() * aliveTargets.length)];
-                        else { processAction(index + 1); return; } // 対象が誰もいない
+                // ターゲット生存確認と再取得
+                let targets = [];
+                if(act.skill.target.includes('all')) {
+                    targets = (act.skill.target.includes('_a') ? battleState.players : battleState.enemies).filter(t => t.hp > 0);
+                } else {
+                    if(act.target.hp <= 0) { // ターゲットが死んでたらランダムに変更
+                        let group = act.skill.target.includes('_a') ? battleState.players : battleState.enemies;
+                        let alive = group.filter(t => t.hp > 0);
+                        if(alive.length === 0) { processNextAction(); return; }
+                        act.target = alive[Math.floor(Math.random()*alive.length)];
                     }
-                    applySkillEffect(act.actor, act.target, act.skill);
+                    targets = [act.target];
                 }
 
-                updateUI();
-                setTimeout(() => { processAction(index + 1); }, 700);
-            }
+                // 技の実行
+                let icon = battleState.players.includes(act.actor) ? "▶" : "▷";
+                targets.forEach(t => {
+                    if(Math.random() > act.skill.acc) {
+                        addLog(`${icon} ${act.actor.name}の${act.skill.name}！...ミス！`); return;
+                    }
+                    if(act.skill.type === 'heal') {
+                        let heal = Math.floor(act.actor.atk * act.skill.power);
+                        t.hp = Math.min(t.maxHp, t.hp + heal);
+                        addLog(`${icon} ${act.actor.name}の${act.skill.name}！<span class="heal-text">${t.name}が${heal}回復！</span>`);
+                    } else {
+                        let dmg = Math.floor(Math.max(1, (act.actor.atk - t.def/2) * act.skill.power * (Math.random()*0.4+0.8)));
+                        t.hp = Math.max(0, t.hp - dmg);
+                        addLog(`${icon} ${act.actor.name}の${act.skill.name}！<span class="dmg-text">${t.name}に${dmg}ダメージ！</span>`);
+                    }
+                });
+                updateBattleUI();
+                
+                // 勝敗判定
+                if(battleState.players.every(p => p.hp <= 0)) { finishBattle(false); return; }
+                if(battleState.enemies.every(e => e.hp <= 0)) { finishBattle(true); return; }
 
-            processAction(0);
+                setTimeout(processNextAction, 800);
+            }
+            processNextAction();
         }
 
         function endRound() {
-            let allChars = players.concat(enemies);
-            allChars.forEach(char => {
-                if (char.hp > 0) {
-                    if (char.status.poison > 0) {
-                        char.status.poison--;
-                        let pDmg = Math.max(1, Math.floor(char.maxHp * 0.1));
-                        char.hp = Math.max(0, char.hp - pDmg);
-                        addLog(`☁️ ${char.name}は毒で ${pDmg} ダメージ！`);
-                    }
-                    if (char.skills) char.skills.forEach(s => { if (s.currentCt > 0) s.currentCt--; });
-                }
+            // CT減少
+            [...battleState.players, ...battleState.enemies].forEach(c => {
+                if(c.skills) c.skills.forEach(s => { if(s.ct > 0) s.ct--; });
             });
-            updateUI();
-            
-            setTimeout(() => {
-                if(players.filter(p => p.hp > 0).length > 0 && enemies.filter(e => e.hp > 0).length > 0) {
-                    roundCount++;
-                    roundActions = [];
-                    currentPlayerIndex = 0;
-                    startCommandInput();
-                }
-            }, 1000);
+            battleState.round++;
+            battleState.actions = [];
+            battleState.turnIdx = 0;
+            setTimeout(startCommandPhase, 1000);
         }
 
-        updateUI();
-        startCommandInput();
+        function finishBattle(isWin) {
+            addLog(`<div class="sys-text" style="font-size:16px; padding:10px;">${isWin ? "🎉 クエストクリア！勝利！" : "💀 全滅した...敗北..."}</div>`);
+            document.getElementById('command-area').innerHTML = `<button class="btn-green" onclick="showScreen('home-screen')">ホームに戻る</button>`;
+            document.getElementById('command-area').style.display = 'block';
+            
+            // バトル終了後のHPを反映させる（回復したHPなどを保持）
+            if(isWin) {
+                myDragons.forEach(d => {
+                    let battleData = battleState.players.find(bd => bd.id === d.id);
+                    if(battleData) d.hp = battleData.hp;
+                });
+            } else {
+                // 負けた場合はHP1で復活
+                myDragons.forEach(d => d.hp = 1);
+            }
+            updateHomeUI(); // ホームの表示を更新しておく
+        }
+
+        // 初回起動時
+        updateHomeUI();
 
     </script>
 </body>
