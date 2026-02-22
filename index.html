@@ -7,10 +7,15 @@
     <style>
         body { font-family: sans-serif; text-align: center; background-color: #222; color: #fff; margin: 0; padding: 20px; }
         .battle-area { display: flex; justify-content: space-around; margin-bottom: 20px; }
-        .character { background: #333; padding: 15px; border-radius: 8px; width: 40%; }
-        .hp-bar { background: #555; height: 20px; border-radius: 10px; margin-top: 10px; overflow: hidden;}
+        .character { background: #333; padding: 15px; border-radius: 8px; width: 40%; position: relative; }
+        .hp-bar { background: #555; height: 20px; border-radius: 10px; margin-top: 5px; overflow: hidden;}
         .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
         .enemy-hp .hp-fill { background: #f44336; }
+        
+        /* 状態異常のアイコン表示用 */
+        .status-box { height: 20px; font-size: 14px; margin-top: 5px; font-weight: bold; }
+        .status-poison { color: #e040fb; text-shadow: 0 0 5px #000; margin-right: 5px; }
+        .status-para { color: #ffeb3b; text-shadow: 0 0 5px #000; }
         
         .command-area { display: flex; flex-direction: column; gap: 10px; align-items: center; }
         button { padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px; transition: 0.2s;}
@@ -18,9 +23,10 @@
         button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
         
         #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.5;}
-        /* ログの色分け用クラス */
         .crit-text { color: #ffeb3b; font-weight: bold; }
         .miss-text { color: #9e9e9e; font-style: italic; }
+        .poison-text { color: #e040fb; }
+        .para-text { color: #ffeb3b; }
     </style>
 </head>
 <body>
@@ -29,38 +35,44 @@
 
     <div class="battle-area">
         <div class="character">
-            <h3>レッドウィング</h3>
-            <div id="player-hp-text">HP: 35 / 35</div>
+            <h3>リーフロング</h3>
+            <div id="player-hp-text">HP: 45 / 45</div>
             <div class="hp-bar"><div id="player-hp-fill" class="hp-fill"></div></div>
+            <div id="player-status" class="status-box"></div>
         </div>
         <div class="character">
             <h3>プチフレア</h3>
             <div id="enemy-hp-text">HP: 30 / 30</div>
             <div class="hp-bar enemy-hp"><div id="enemy-hp-fill" class="hp-fill"></div></div>
+            <div id="enemy-status" class="status-box"></div>
         </div>
     </div>
 
     <div class="command-area">
-        <button id="btn-skill-0" onclick="executeTurn(0)">ひっかく</button>
-        <button id="btn-skill-1" onclick="executeTurn(1)">フレイムブレス</button>
-        <button id="btn-skill-2" onclick="executeTurn(2)">渾身の一撃</button>
+        <button id="btn-skill-0" onclick="startTurn(0)">たいあたり</button>
+        <button id="btn-skill-1" onclick="startTurn(1)">ポイズンブレス</button>
+        <button id="btn-skill-2" onclick="startTurn(2)">パラライズロア</button>
     </div>
 
     <div id="log">野生のプチフレアが現れた！<br>バトル開始！<br></div>
 
     <script>
-        // 1. ステータスに「クリティカル率(crit)」「回避率(eva)」「技の命中率(accuracy)」を追加
+        // 1. ステータスに「状態異常(status)」と「耐性(resist)」を追加
+        // プレイヤーを木属性の「リーフロング」に変更（高HP・低速度・状態異常技持ち）
         let player = { 
-            name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10, crit: 0.05, eva: 0.0,
+            name: "リーフロング", maxHp: 45, hp: 45, atk: 10, def: 15, spd: 8, crit: 0.05, eva: 0.0,
+            status: { poison: 0, paralysis: 0 }, resist: { poison: 0.0, paralysis: 0.0 },
             skills: [
-                { name: "ひっかく", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 },       // 命中100%
-                { name: "フレイムブレス", power: 1.5, maxCt: 3, currentCt: 0, accuracy: 0.9 }, // 命中90%
-                { name: "渾身の一撃", power: 2.0, maxCt: 4, currentCt: 0, accuracy: 0.8 }  // 命中80%
+                { name: "たいあたり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null, effectChance: 0 },
+                { name: "ポイズンブレス", power: 0.5, maxCt: 3, currentCt: 0, accuracy: 0.9, effect: "poison", effectChance: 0.7 }, // 70%で毒(3ターン)
+                { name: "パラライズロア", power: 0.8, maxCt: 4, currentCt: 0, accuracy: 0.9, effect: "paralysis", effectChance: 0.6 } // 60%で麻痺(2ターン)
             ]
         };
-        // 敵は10%の確率で攻撃を避ける素早い設定
-        let enemy = { name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8, crit: 0.05, eva: 0.1,
-            skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0 } ]
+        // 敵の速度は10（プレイヤーの8より速いので、必ず敵が先制します）
+        let enemy = { 
+            name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8, spd: 10, crit: 0.05, eva: 0.1,
+            status: { poison: 0, paralysis: 0 }, resist: { poison: 0.0, paralysis: 0.0 },
+            skills: [ { name: "体当たり", power: 1.0, maxCt: 0, currentCt: 0, accuracy: 1.0, effect: null, effectChance: 0 } ]
         };
 
         function addLog(message) {
@@ -69,12 +81,22 @@
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
+        // 状態異常の表示用テキストを作る
+        function getStatusHtml(char) {
+            let html = "";
+            if (char.status.poison > 0) html += `<span class="status-poison">【毒】</span>`;
+            if (char.status.paralysis > 0) html += `<span class="status-para">【麻痺】</span>`;
+            return html;
+        }
+
         function updateUI() {
             document.getElementById("player-hp-text").innerText = `HP: ${player.hp} / ${player.maxHp}`;
             document.getElementById("player-hp-fill").style.width = `${(player.hp / player.maxHp) * 100}%`;
+            document.getElementById("player-status").innerHTML = getStatusHtml(player);
             
             document.getElementById("enemy-hp-text").innerText = `HP: ${enemy.hp} / ${enemy.maxHp}`;
             document.getElementById("enemy-hp-fill").style.width = `${(enemy.hp / enemy.maxHp) * 100}%`;
+            document.getElementById("enemy-status").innerHTML = getStatusHtml(enemy);
 
             for(let i = 0; i < 3; i++) {
                 let btn = document.getElementById(`btn-skill-${i}`);
@@ -89,87 +111,145 @@
             }
         }
 
-        // 2. 攻撃の判定処理（命中・回避・クリティカルをすべて計算する関数）
-        function performAttack(attacker, defender, skill) {
-            // ① 命中判定 (技の命中率 - 相手の回避率)
-            let hitChance = skill.accuracy - defender.eva;
-            if (Math.random() > hitChance) {
-                return { damage: 0, isMiss: true, isCrit: false }; // 外れた！
-            }
-
-            // ② ダメージ計算 (基本計算 × 乱数 × 技威力)
-            let baseDamage = attacker.atk - (defender.def / 2);
-            let randomFactor = (Math.random() * 0.3) + 0.85; 
-            let finalDamage = Math.floor(baseDamage * randomFactor * skill.power);
-            finalDamage = Math.max(1, finalDamage);
-
-            // ③ クリティカル判定 (5%の確率でダメージ1.5倍)
-            let isCrit = false;
-            if (Math.random() < attacker.critRate) {
-                isCrit = true;
-                finalDamage = Math.floor(finalDamage * 1.5);
-            }
-
-            return { damage: finalDamage, isMiss: false, isCrit: isCrit };
-        }
-
-        // 3. ターンの進行
-        function executeTurn(skillIndex) {
-            if (player.hp <= 0 || enemy.hp <= 0) return;
-
-            let pSkill = player.skills[skillIndex];
-            pSkill.currentCt = pSkill.maxCt; // CT発生
-            disableAllButtons();
-
-            // プレイヤーの攻撃処理
-            let pResult = performAttack(player, enemy, pSkill);
-            
-            if (pResult.isMiss) {
-                addLog(`▶ ${player.name}の ${pSkill.name}！ <span class="miss-text">...しかし避けられた！（ミス）</span>`);
-            } else {
-                enemy.hp = Math.max(0, enemy.hp - pResult.damage);
-                let critText = pResult.isCrit ? `<span class="crit-text">会心の一撃！！</span> ` : "";
-                addLog(`▶ ${player.name}の ${pSkill.name}！ ${critText}${enemy.name}に ${pResult.damage} のダメージ！`);
-            }
-            
-            updateUI();
-            
-            if (enemy.hp <= 0) {
-                addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
-                return;
-            }
-
-            // 敵の反撃処理（少し遅れて発生）
-            setTimeout(() => {
-                let eSkill = enemy.skills[0];
-                let eResult = performAttack(enemy, player, eSkill);
-                
-                if (eResult.isMiss) {
-                    addLog(`▷ ${enemy.name}の ${eSkill.name}！ <span class="miss-text">...しかし外れた！（ミス）</span>`);
-                } else {
-                    player.hp = Math.max(0, player.hp - eResult.damage);
-                    let critText = eResult.isCrit ? `<span class="crit-text">痛恨の一撃！！</span> ` : "";
-                    addLog(`▷ ${enemy.name}の ${eSkill.name}！ ${critText}${player.name}に ${eResult.damage} のダメージ！`);
-                }
-                
-                // CTを減らす
-                for(let i=0; i<3; i++) {
-                    if(player.skills[i].currentCt > 0) player.skills[i].currentCt--;
-                }
-
-                updateUI();
-                
-                if (player.hp <= 0) {
-                    addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
-                    disableAllButtons();
-                }
-            }, 800); 
-        }
-
         function disableAllButtons() {
             for(let i = 0; i < 3; i++) {
                 document.getElementById(`btn-skill-${i}`).disabled = true;
             }
+        }
+
+        // 2. 攻撃と状態異常の判定
+        function performAttack(attacker, defender, skill) {
+            let result = { damage: 0, isMiss: true, isCrit: false, addedStatus: null };
+            
+            let hitChance = skill.accuracy - defender.eva;
+            if (Math.random() > hitChance) return result;
+
+            result.isMiss = false;
+
+            // ダメージ計算
+            let baseDamage = attacker.atk - (defender.def / 2);
+            let randomFactor = (Math.random() * 0.3) + 0.85; 
+            let finalDamage = Math.floor(baseDamage * randomFactor * skill.power);
+            result.damage = Math.max(1, finalDamage);
+
+            if (Math.random() < attacker.crit) {
+                result.isCrit = true;
+                result.damage = Math.floor(result.damage * 1.5);
+            }
+
+            // 状態異常の付与判定
+            if (skill.effect) {
+                let statusChance = skill.effectChance - defender.resist[skill.effect];
+                if (Math.random() < statusChance) {
+                    defender.status[skill.effect] = (skill.effect === "poison") ? 3 : 2; // 毒は3ターン、麻痺は2ターン
+                    result.addedStatus = skill.effect;
+                }
+            }
+
+            return result;
+        }
+
+        // 3. ターンの進行
+        function startTurn(skillIndex) {
+            if (player.hp <= 0 || enemy.hp <= 0) return;
+            disableAllButtons();
+
+            let pSkill = player.skills[skillIndex];
+            pSkill.currentCt = pSkill.maxCt;
+
+            let actions = [
+                { actor: player, target: enemy, skill: pSkill },
+                { actor: enemy, target: player, skill: enemy.skills[0] }
+            ];
+
+            // 速度順に並び替え（リーフロングは遅いので後攻になります）
+            actions.sort((a, b) => {
+                if (a.actor.spd === b.actor.spd) return Math.random() - 0.5;
+                return b.actor.spd - a.actor.spd;
+            });
+
+            function processAction(index) {
+                if (index >= actions.length || player.hp <= 0 || enemy.hp <= 0) {
+                    endTurn();
+                    return;
+                }
+
+                let act = actions[index];
+                let icon = act.actor === player ? "▶" : "▷";
+                let actionDelay = 800;
+
+                // ① 麻痺のチェック（行動前に判定）
+                if (act.actor.status.paralysis > 0) {
+                    act.actor.status.paralysis--; // ターンを消費
+                    if (Math.random() < 0.5) {
+                        addLog(`${icon} ${act.actor.name}は<span class="para-text">体がしびれて動けない！</span>`);
+                        updateUI();
+                        checkPoison(act.actor, icon); // 動けなくても毒ダメージは受ける
+                        setTimeout(() => processAction(index + 1), actionDelay);
+                        return;
+                    }
+                }
+
+                // ② 攻撃の実行
+                let result = performAttack(act.actor, act.target, act.skill);
+                
+                if (result.isMiss) {
+                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ <span class="miss-text">...しかし避けられた！（ミス）</span>`);
+                } else {
+                    act.target.hp = Math.max(0, act.target.hp - result.damage);
+                    let critText = result.isCrit ? `<span class="crit-text">会心の一撃！！</span> ` : "";
+                    addLog(`${icon} ${act.actor.name}の ${act.skill.name}！ ${critText}${act.target.name}に ${result.damage} のダメージ！`);
+                    
+                    // 状態異常が付与された時のログ
+                    if (result.addedStatus === "poison") {
+                        addLog(`☁️ ${act.target.name}は<span class="poison-text">毒</span>を浴びた！`);
+                    } else if (result.addedStatus === "paralysis") {
+                        addLog(`⚡ ${act.target.name}は<span class="para-text">麻痺</span>してしまった！`);
+                    }
+                }
+
+                updateUI();
+
+                // 敵を倒したか判定
+                if (enemy.hp <= 0) {
+                    addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
+                    return;
+                }
+
+                // ③ 毒のチェック（行動後に判定）
+                checkPoison(act.actor, icon);
+
+                if (player.hp <= 0) {
+                    addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
+                    return;
+                }
+
+                setTimeout(() => {
+                    processAction(index + 1);
+                }, actionDelay);
+            }
+
+            processAction(0);
+        }
+
+        // 毒のダメージ処理
+        function checkPoison(char, icon) {
+            if (char.status.poison > 0) {
+                char.status.poison--;
+                let poisonDamage = Math.max(1, Math.floor(char.maxHp * 0.1)); // 最大HPの10%（最低1ダメージ）
+                char.hp = Math.max(0, char.hp - poisonDamage);
+                addLog(`${icon} ${char.name}は<span class="poison-text">毒のダメージ</span>を受けた！（${poisonDamage}ダメージ）`);
+                updateUI();
+            }
+        }
+
+        function endTurn() {
+            for(let i=0; i<3; i++) {
+                if(player.skills[i].currentCt > 0) player.skills[i].currentCt--;
+            }
+            setTimeout(() => {
+                updateUI();
+            }, 500);
         }
     </script>
 </body>
