@@ -11,8 +11,14 @@
         .hp-bar { background: #555; height: 20px; border-radius: 10px; margin-top: 10px; overflow: hidden;}
         .hp-fill { background: #4caf50; height: 100%; width: 100%; transition: width 0.3s; }
         .enemy-hp .hp-fill { background: #f44336; }
-        button { padding: 15px 30px; font-size: 18px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px;}
-        button:active { background: #1976d2; }
+        
+        /* コマンドボタンを縦並びにきれいに配置 */
+        .command-area { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        button { padding: 12px 20px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; background: #2196f3; color: white; cursor: pointer; width: 100%; max-width: 300px; transition: 0.2s;}
+        button:active { background: #1976d2; transform: scale(0.98); }
+        /* CT中（押せない状態）のボタンデザイン */
+        button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; }
+        
         #log { margin-top: 20px; height: 150px; overflow-y: scroll; background: #111; padding: 10px; border-radius: 8px; text-align: left; font-size: 14px;}
     </style>
 </head>
@@ -28,72 +34,119 @@
         </div>
         <div class="character">
             <h3>プチフレア</h3>
-            <div id="enemy-hp-text">HP: 25 / 25</div>
+            <div id="enemy-hp-text">HP: 30 / 30</div>
             <div class="hp-bar enemy-hp"><div id="enemy-hp-fill" class="hp-fill"></div></div>
         </div>
     </div>
 
-    <button id="attack-btn" onclick="executeTurn()">たたかう（通常攻撃）</button>
+    <div class="command-area">
+        <button id="btn-skill-0" onclick="executeTurn(0)">ひっかく</button>
+        <button id="btn-skill-1" onclick="executeTurn(1)">フレイムブレス</button>
+        <button id="btn-skill-2" onclick="executeTurn(2)">渾身の一撃</button>
+    </div>
 
     <div id="log">野生のプチフレアが現れた！<br>バトル開始！<br></div>
 
     <script>
-        // 1. ステータスデータの準備
-        let player = { name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10 };
-        let enemy = { name: "プチフレア", maxHp: 25, hp: 25, atk: 12, def: 8 };
+        // 1. ステータスと「技（スキル）」データの準備
+        let player = { 
+            name: "レッドウィング", maxHp: 35, hp: 35, atk: 18, def: 10,
+            skills: [
+                { name: "ひっかく", power: 1.0, maxCt: 0, currentCt: 0 },
+                { name: "フレイムブレス", power: 1.5, maxCt: 3, currentCt: 0 },
+                { name: "渾身の一撃", power: 2.0, maxCt: 4, currentCt: 0 }
+            ]
+        };
+        let enemy = { name: "プチフレア", maxHp: 30, hp: 30, atk: 12, def: 8 };
 
-        // バトルログを追加する機能
         function addLog(message) {
             const logDiv = document.getElementById("log");
             logDiv.innerHTML += message + "<br>";
-            logDiv.scrollTop = logDiv.scrollHeight; // 常に最新のログを下までスクロール
+            logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        // 画面のHP表示を更新する機能
+        // 画面のHPとボタンのCT表示を更新する機能
         function updateUI() {
             document.getElementById("player-hp-text").innerText = `HP: ${player.hp} / ${player.maxHp}`;
             document.getElementById("player-hp-fill").style.width = `${(player.hp / player.maxHp) * 100}%`;
             
             document.getElementById("enemy-hp-text").innerText = `HP: ${enemy.hp} / ${enemy.maxHp}`;
             document.getElementById("enemy-hp-fill").style.width = `${(enemy.hp / enemy.maxHp) * 100}%`;
+
+            // 技ボタンの更新（CTが0より大きい場合は押せなくして、残りターンを表示）
+            for(let i = 0; i < 3; i++) {
+                let btn = document.getElementById(`btn-skill-${i}`);
+                let skill = player.skills[i];
+                
+                if(skill.currentCt > 0) {
+                    btn.innerText = `${skill.name} (あと${skill.currentCt}ターン)`;
+                    btn.disabled = true;
+                } else {
+                    btn.innerText = skill.name;
+                    if(player.hp > 0 && enemy.hp > 0) {
+                        btn.disabled = false; // HPがある時は押せるように戻す
+                    }
+                }
+            }
         }
 
-        // 2. ダメージ計算のルール（乱数 85%〜115%）
-        function calcDamage(atk, def) {
+        // 2. ダメージ計算（技の威力倍率を掛け算に追加）
+        function calcDamage(atk, def, powerRatio) {
             let baseDamage = atk - (def / 2);
             let randomFactor = (Math.random() * 0.3) + 0.85; 
-            let finalDamage = Math.floor(baseDamage * randomFactor);
-            return Math.max(1, finalDamage); // 最低でも1ダメージは与える
+            let finalDamage = Math.floor(baseDamage * randomFactor * powerRatio);
+            return Math.max(1, finalDamage);
         }
 
-        // 3. たたかうボタンを押した時の処理
-        function executeTurn() {
-            if (player.hp <= 0 || enemy.hp <= 0) return; // どちらかが倒れていたらストップ
+        // 3. 技ボタンを押した時の処理（引数でどの技を選んだか受け取る）
+        function executeTurn(skillIndex) {
+            if (player.hp <= 0 || enemy.hp <= 0) return;
+
+            let skill = player.skills[skillIndex];
 
             // プレイヤーの攻撃
-            let pDamage = calcDamage(player.atk, enemy.def);
+            let pDamage = calcDamage(player.atk, enemy.def, skill.power);
             enemy.hp = Math.max(0, enemy.hp - pDamage);
-            addLog(`▶ ${player.name}の攻撃！ ${enemy.name}に ${pDamage} のダメージ！`);
+            addLog(`▶ ${player.name}の ${skill.name}！ ${enemy.name}に ${pDamage} のダメージ！`);
+            
+            // 使った技のCTを最大値にセットする
+            skill.currentCt = skill.maxCt;
             updateUI();
             
             if (enemy.hp <= 0) {
                 addLog(`⭐ ${enemy.name}の洗脳が解け、仲間に加わった！`);
-                document.getElementById("attack-btn").disabled = true;
+                disableAllButtons();
                 return;
             }
 
-            // 敵の反撃（少し遅らせて演出っぽくする）
+            // 敵の反撃中はすべてのボタンを押せなくする
+            disableAllButtons(); 
+            
             setTimeout(() => {
-                let eDamage = calcDamage(enemy.atk, player.def);
+                let eDamage = calcDamage(enemy.atk, player.def, 1.0); // 敵は通常攻撃
                 player.hp = Math.max(0, player.hp - eDamage);
                 addLog(`▷ ${enemy.name}の反撃！ ${player.name}に ${eDamage} のダメージ！`);
-                updateUI();
+                
+                // ターン終了時：プレイヤーの全技のCTを1減らす
+                for(let i=0; i<3; i++) {
+                    if(player.skills[i].currentCt > 0) {
+                        player.skills[i].currentCt--;
+                    }
+                }
+
+                updateUI(); // CT減少を画面に反映してボタンを復活させる
                 
                 if (player.hp <= 0) {
                     addLog(`💀 ${player.name}は倒れた...目の前が真っ暗になった。`);
-                    document.getElementById("attack-btn").disabled = true;
+                    disableAllButtons();
                 }
             }, 800); 
+        }
+
+        function disableAllButtons() {
+            for(let i = 0; i < 3; i++) {
+                document.getElementById(`btn-skill-${i}`).disabled = true;
+            }
         }
     </script>
 </body>
